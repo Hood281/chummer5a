@@ -212,15 +212,6 @@ namespace Chummer
                 }
 				_objCharacter.GameplayOptionQualityLimit = _objCharacter.MaxKarma = Convert.ToInt32(strKarma);
 				_objCharacter.MaxNuyen = Convert.ToInt32(strNuyen);
-				
-                lblPBuildAttributes.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.Attributes).ToString(), _objCharacter.TotalAttributes.ToString());
-                lblPBuildSpells.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.SpellLimit - _objCharacter.Spells.Count).ToString(), _objCharacter.SpellLimit.ToString());
-                lblPBuildComplexForms.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.CFPLimit - _objCharacter.ComplexForms.Count).ToString(), _objCharacter.CFPLimit.ToString());
-                tabInfo.TabPages.RemoveAt(0);
-            }
-            else
-            {
-                tabInfo.TabPages.RemoveAt(1);
             }
 
             int count = 0;
@@ -4504,7 +4495,8 @@ namespace Chummer
                 treCyberware.Nodes.Remove(treCyberware.SelectedNode);
 
                 _objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.PoolModifiers));
-                RefreshSelectedCyberware();
+				_objCharacter.ForceAttributePropertyChangedNotificationAll(nameof(CharacterAttrib.AttributeModifiers));
+				RefreshSelectedCyberware();
 
                 ScheduleCharacterUpdate();
 
@@ -4584,7 +4576,7 @@ namespace Chummer
             //if (_objCharacter.CFPLimit - intComplexForms < 0)
             //    lblPBuildComplexForms.Text = String.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (0).ToString(), _objCharacter.CFPLimit.ToString());
             //else
-            lblPBuildComplexForms.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.CFPLimit - intComplexForms).ToString(), _objCharacter.CFPLimit.ToString());
+            lblBuildComplexForms.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.CFPLimit - intComplexForms).ToString(), _objCharacter.CFPLimit.ToString());
 
             if (frmPickProgram.AddAgain)
                 cmdAddComplexForm_Click(sender, e);
@@ -5051,6 +5043,7 @@ namespace Chummer
             _objController.PopulateFocusList(treFoci);
 
 			_objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.PoolModifiers));
+			_objCharacter.ForceAttributePropertyChangedNotificationAll(nameof(CharacterAttrib.AttributeModifiers));
 			ScheduleCharacterUpdate();
             RefreshSelectedGear();
 
@@ -6149,7 +6142,7 @@ namespace Chummer
                 _objCharacter.ComplexForms.Remove(objProgram);
                 treComplexForms.SelectedNode.Remove();
 
-                lblPBuildComplexForms.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.CFPLimit - _objCharacter.ComplexForms.Count).ToString(), _objCharacter.CFPLimit.ToString());
+                lblBuildComplexForms.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", (_objCharacter.CFPLimit - _objCharacter.ComplexForms.Count).ToString(), _objCharacter.CFPLimit.ToString());
 
                 ScheduleCharacterUpdate();
 
@@ -6345,25 +6338,33 @@ namespace Chummer
             }
             else
             {
-                // Calculate the cost of the current Positive Qualities.
-                foreach (Quality objCharacterQuality in _objCharacter.Qualities)
+                if (objQuality.ContributeToLimit || objQuality.ContributeToBP)
                 {
-                    if (objCharacterQuality.Type == QualityType.Positive && objCharacterQuality.ContributeToLimit)
-                        intBP += objCharacterQuality.BP;
-                }
-                if (_objCharacter.BuildMethod == CharacterBuildMethod.Karma)
-                    intBP *= _objOptions.KarmaQuality;
-
-                // Include the amount from Free Negative Quality BP cost Improvements.
-                intBP -= (_objImprovementManager.ValueOf(Improvement.ImprovementType.FreePositiveQualities) * _objOptions.KarmaQuality);
-
-                // Check if adding this Quality would put the character over their limit.
-                if (!_objOptions.ExceedPositiveQualities)
-                {
-                    if (intBP > intMaxQualityAmount && !_objCharacter.IgnoreRules)
+                    // Calculate the cost of the current Positive Qualities.
+                    foreach (Quality objCharacterQuality in _objCharacter.Qualities)
                     {
-                        MessageBox.Show(LanguageManager.Instance.GetString("Message_PositiveQualityLimit").Replace("{0}", strAmount), LanguageManager.Instance.GetString("MessageTitle_PositiveQualityLimit"), MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        blnAddItem = false;
+                        if (objCharacterQuality.Type == QualityType.Positive && objCharacterQuality.ContributeToLimit)
+                            intBP += objCharacterQuality.BP;
+                    }
+                    if (_objCharacter.BuildMethod == CharacterBuildMethod.Karma)
+                        intBP *= _objOptions.KarmaQuality;
+
+                    // Include the amount from Free Negative Quality BP cost Improvements.
+                    intBP -= (_objImprovementManager.ValueOf(Improvement.ImprovementType.FreePositiveQualities) *
+                              _objOptions.KarmaQuality);
+
+                    // Check if adding this Quality would put the character over their limit.
+                    if (!_objOptions.ExceedPositiveQualities)
+                    {
+                        if (intBP > intMaxQualityAmount && !_objCharacter.IgnoreRules)
+                        {
+                            MessageBox.Show(
+                                LanguageManager.Instance.GetString("Message_PositiveQualityLimit")
+                                    .Replace("{0}", strAmount),
+                                LanguageManager.Instance.GetString("MessageTitle_PositiveQualityLimit"),
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            blnAddItem = false;
+                        }
                     }
                 }
             }
@@ -7318,7 +7319,13 @@ namespace Chummer
                 tsGearAddAsPlugin_Click(sender, e);
         }
 
-        private void tsVehicleAddMod_Click(object sender, EventArgs e)
+		private void tsVehicleAddWeaponMount_Click(object sender, EventArgs e)
+		{
+			frmCreateWeaponMount frmPickVehicleMod = new frmCreateWeaponMount();
+			frmPickVehicleMod.ShowDialog(this);
+		}
+
+		private void tsVehicleAddMod_Click(object sender, EventArgs e)
         {
             while (treVehicles.SelectedNode != null && treVehicles.SelectedNode.Level > 1)
                 treVehicles.SelectedNode = treVehicles.SelectedNode.Parent;
@@ -9104,7 +9111,7 @@ namespace Chummer
 
             if (frmPickCyberware.FreeCost)
                 objCyberware.Cost = "0";
-
+	        objCyberware.PrototypeTranshuman = frmPickCyberware.PrototypeTranshuman;
 	        objCyberware.DiscountCost = frmPickCyberware.BlackMarketDiscount;
             objCyberware.VehicleMounted = true;
 			//TODO: There has to be a better way to do this. Can't currently be handled in the create method because Create doesn't know about parents.
@@ -9309,7 +9316,7 @@ namespace Chummer
             // Run through the list of Active Skills and pick out the two applicable ones.
             int intSkillValue = _objCharacter.SkillsSection.Skills.Where(x => x.Name == "Spellcasting" || x.Name == "Ritual Spellcasting").Max(x => x.Rating);
             
-            if (intSpellCount >= ((2 * intSkillValue) + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellLimit)) && !_objCharacter.IgnoreRules)
+            if (intSpellCount >= (2 * intSkillValue + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellLimit)) && !_objCharacter.IgnoreRules)
             {
                 MessageBox.Show(LanguageManager.Instance.GetString("Message_SpellLimit"), LanguageManager.Instance.GetString("MessageTitle_SpellLimit"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -10415,7 +10422,30 @@ namespace Chummer
             }
         }
 
-        private void nudCyberwareRating_ValueChanged(object sender, EventArgs e)
+		private void chkPrototypeTranshuman_CheckedChanged(object sender, EventArgs e)
+		{
+			if (!_blnSkipRefresh)
+			{
+				// Locate the selected piece of Cyberware.
+				bool blnFound = false;
+				Cyberware objCyberware = CommonFunctions.DeepFindById(treCyberware.SelectedNode.Tag.ToString(), _objCharacter.Cyberware);
+				if (objCyberware != null)
+					blnFound = true;
+
+				if (blnFound)
+				{
+					// Update the selected Cyberware Rating.
+					objCyberware.PrototypeTranshuman = chkPrototypeTranshuman.Checked;
+				}
+
+				RefreshSelectedCyberware();
+
+				_blnIsDirty = true;
+				UpdateWindowTitle();
+			}
+			ScheduleCharacterUpdate();
+		}
+		private void nudCyberwareRating_ValueChanged(object sender, EventArgs e)
         {
             if (!_blnSkipRefresh)
             {
@@ -10443,7 +10473,8 @@ namespace Chummer
 
                     treCyberware.SelectedNode.Text = objCyberware.DisplayName;
 
-	                _objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.AttributeModifiers));
+					_objCharacter.ForceAttributePropertyChangedNotificationAll(nameof(CharacterAttrib.AttributeModifiers));
+					_objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.AttributeModifiers));
                 }
                 else
                 {
@@ -10473,7 +10504,6 @@ namespace Chummer
 
                 _blnIsDirty = true;
                 UpdateWindowTitle();
-                //_objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.Attribute));
             }
             ScheduleCharacterUpdate();
         }
@@ -10810,7 +10840,8 @@ namespace Chummer
 
                 _objController.PopulateFocusList(treFoci);
                 RefreshSelectedGear();
-                ScheduleCharacterUpdate();
+                ScheduleCharacterUpdate(); 
+				_objCharacter.ForceAttributePropertyChangedNotificationAll(nameof(CharacterAttrib.AttributeModifiers));
 				_objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.Rating));
 
                 _blnIsDirty = true;
@@ -12099,20 +12130,12 @@ namespace Chummer
                 cboSpiritIllusion.Visible = false;
                 cboSpiritManipulation.Visible = false;
 
-
-                string strDrain = objXmlTradition["drain"].InnerText;
-
-                foreach (string strAttribute in Character.AttributeStrings)
-                {
-                    CharacterAttrib objAttrib = _objCharacter.GetAttribute(strAttribute);
-                    strDrain = strDrain.Replace(objAttrib.Abbrev, objAttrib.DisplayAbbrev);
-                }
-                lblDrainAttributes.Text = strDrain;
                 lblTraditionSource.Text = objXmlTradition["source"].InnerText + " " + objXmlTradition["page"].InnerText;
                 _objCharacter.MagicTradition = cboTradition.SelectedValue.ToString();
-                _objCharacter.TraditionDrain = strDrain;
+                _objCharacter.TraditionDrain = objXmlTradition["drain"].InnerText;
 
-                foreach (SpiritControl objSpiritControl in panSpirits.Controls)
+				CalculateTraditionDrain(_objCharacter.TraditionDrain, _objImprovementManager, Improvement.ImprovementType.DrainResistance, lblDrainAttributes, lblDrainAttributesValue, tipTooltip);
+				foreach (SpiritControl objSpiritControl in panSpirits.Controls)
                     objSpiritControl.RebuildSpiritList(cboTradition.SelectedValue.ToString());
 
             }
@@ -12836,7 +12859,6 @@ namespace Chummer
             {
                 lblKarmaMetatypeBP.Text = "0 " + LanguageManager.Instance.GetString("String_Karma");
             }
-            lblMetatypeBP.Text = lblKarmaMetatypeBP.Text;
 
             string strToolTip = _objCharacter.Metatype;
             if (!string.IsNullOrEmpty(_objCharacter.Metavariant))
@@ -12898,12 +12920,12 @@ namespace Chummer
 
 		private string BuildAttributes(List<CharacterAttrib> attribs, List<CharacterAttrib> extraAttribs = null, bool special = false)
 		{
-			string s = string.Empty;
 			int bp = CalculateAttributeBP(attribs, extraAttribs);
+			string s = $"{bp} {LanguageManager.Instance.GetString("String_Karma")}";
 			int att = CalculteAttributePriorityPoints(attribs, extraAttribs);
 			int total = special ? _objCharacter.TotalSpecial : _objCharacter.TotalAttributes;
 			if ((_objCharacter.BuildMethod == CharacterBuildMethod.Priority) ||
-				(_objCharacter.BuildMethod == CharacterBuildMethod.SumtoTen))
+			    (_objCharacter.BuildMethod == CharacterBuildMethod.SumtoTen))
 			{
 				if (bp > 0)
 				{
@@ -13031,7 +13053,6 @@ namespace Chummer
 			
 			lblContactsBP.Text = sb.ToString();
 			lblContactPoints.Text = sb.ToString();
-			lblPBuildContacts.Text = sb.ToString();
 
             intKarmaPointsRemain -= intPointsInContacts;
 
@@ -13099,10 +13120,8 @@ namespace Chummer
             intQualityPointsUsed = intLifeModuleQualities + intNegativeQualities + intPositiveQualities;
 
             lblPositiveQualitiesBP.Text = string.Format("{0} " + strPoints, intPositiveQualities);
-            lblPBuildPositiveQualities.Text = string.Format("{0} " + strPoints, intPositiveQualities);
 
             lblNegativeQualitiesBP.Text = string.Format("{0} " + strPoints, intNegativeQualities);
-            lblPBuildNegativeQualities.Text = string.Format("{0} " + strPoints, intNegativeQualities);
 
             intKarmaPointsRemain -= intQualityPointsUsed;
             intFreestyleBP += intQualityPointsUsed;
@@ -13110,10 +13129,10 @@ namespace Chummer
             // ------------------------------------------------------------------------------
             // Update Primary Attributes and Special Attributes values.
             int intAttributePointsUsed = CalculateAttributeBP(_objCharacter.AttributeList);
-	        lblPBuildAttributes.Text = BuildAttributes(_objCharacter.AttributeList);
-			intAttributePointsUsed += CalculateAttributeBP(_objCharacter.SpecialAttributeList);
 			lblAttributesBP.Text = string.Format("{0} " + strPoints, intAttributePointsUsed.ToString());
+			intAttributePointsUsed += CalculateAttributeBP(_objCharacter.SpecialAttributeList);
 			intKarmaPointsRemain -= intAttributePointsUsed;
+			lblAttributesBP.Text = BuildAttributes(_objCharacter.AttributeList, null);
 			lblPBuildSpecial.Text = BuildAttributes(_objCharacter.SpecialAttributeList,null,true);
 			// ------------------------------------------------------------------------------
 			// Include the BP used by Martial Arts.
@@ -13132,28 +13151,19 @@ namespace Chummer
             // ------------------------------------------------------------------------------
             // Calculate the BP used by Skill Groups.
             int intSkillGroupsPoints = _objCharacter.SkillsSection.SkillGroups.TotalCostKarma();
-
-                lblSkillGroupsBP.Text = string.Format("{0} " + strPoints, intSkillGroupsPoints);
 			intKarmaPointsRemain -= intSkillGroupsPoints;
             // ------------------------------------------------------------------------------
             // Calculate the BP used by Active Skills.
 			int skillPointsKarma = _objCharacter.SkillsSection.Skills.TotalCostKarma();
 			intKarmaPointsRemain -= skillPointsKarma;
-			lblActiveSkillsBP.Text = $"{skillPointsKarma} {strPoints}";
 
             // ------------------------------------------------------------------------------
             // Calculate the points used by Knowledge Skills.
             int knowledgeKarmaUsed = _objCharacter.SkillsSection.KnowledgeSkills.Sum(x => x.CurrentKarmaCost());
 			//TODO: Remaining is named USED?
             intKarmaPointsRemain -= knowledgeKarmaUsed;
-
-            // Update the label that displays the number of free Knowledge Skill points remaining.
-            lblPBuildKnowledgeSkills.Text =
-		        $"{(_objCharacter.SkillsSection.KnowledgeSkillPointsRemain)} {LanguageManager.Instance.GetString("String_Of")}  {_objCharacter.SkillsSection.KnowledgeSkillPoints}";
-
 			tabSkillUc.MissingDatabindingsWorkaround();
-
-			lblKnowledgeSkillsBP.Text = string.Format("{0} " + strPoints, knowledgeKarmaUsed);
+			
             intFreestyleBP += knowledgeKarmaUsed;
 
             // ------------------------------------------------------------------------------
@@ -13194,7 +13204,7 @@ namespace Chummer
                         intKarmaPointsRemain -= intAttributePointsUsed;
                     }
                 }
-	            for (int i = _objCharacter.SpellLimit; i >= 0; i--)
+	            for (int i = _objCharacter.SpellLimit; i > 0; i--)
 	            {
 		            if (spells > 0)
 		            {
@@ -13217,20 +13227,72 @@ namespace Chummer
 		            }
 	            }
                 // Each spell costs KarmaSpell.
-                intKarmaPointsRemain -= Math.Max(0, spells + rituals + preps - _objCharacter.SpellLimit) * _objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount);
-                intSpellPointsUsed += Math.Max(Math.Max(0, spells) * _objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount), 0);
-				intRitualPointsUsed += Math.Max(Math.Max(0, rituals) * _objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount), 0);
-				intPrepPointsUsed += Math.Max(Math.Max(0, preps) * _objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount), 0);
-				tipTooltip.SetToolTip(lblSpellsBP, $"{spells} x {_objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount)} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
-				tipTooltip.SetToolTip(lblRitualsBP, $"{rituals} x {_objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount)} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
-				tipTooltip.SetToolTip(lblPreparationsBP, $"{preps} x {_objOptions.KarmaSpell + _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount)} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
+	            int spellCost = _objOptions.KarmaSpell +
+	                            _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellKarmaDiscount);
+				intKarmaPointsRemain -= Math.Max(0, spells + rituals + preps) * (spellCost);
+                intSpellPointsUsed += Math.Max(Math.Max(0, spells) * (spellCost), 0);
+				intRitualPointsUsed += Math.Max(Math.Max(0, rituals) * (spellCost), 0);
+				intPrepPointsUsed += Math.Max(Math.Max(0, preps) * spellCost, 0);
+				tipTooltip.SetToolTip(lblSpellsBP, $"{spells} x {spellCost} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
+				tipTooltip.SetToolTip(lblBuildRitualsBP, $"{rituals} x {spellCost} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
+				tipTooltip.SetToolTip(lblBuildPrepsBP, $"{preps} x {spellCost} + {LanguageManager.Instance.GetString("String_Karma")} = {intSpellPointsUsed} {LanguageManager.Instance.GetString("String_Karma")}");
 			}
-	        lblBuildPrepsBP.Text = $"{intPrepPointsUsed} {strPoints}";
-			lblSpellsBP.Text = $"{intSpellPointsUsed} {strPoints}";
-			lblBuildRitualsBP.Text = $"{intRitualPointsUsed} {strPoints}";
-			lblPBuildSpells.Text = string.Format($"{spellPoints} {LanguageManager.Instance.GetString("String_Of")} {_objCharacter.MAG.Value * 2}: {intSpellPointsUsed} {strPoints}");
-			lblRitualsBP.Text = string.Format($"{ritualPoints} {LanguageManager.Instance.GetString("String_Of")} {_objCharacter.MAG.Value * 2}: {intRitualPointsUsed} {strPoints}");
-			lblPreparationsBP.Text = string.Format($"{prepPoints} {LanguageManager.Instance.GetString("String_Of")} {_objCharacter.MAG.Value * 2}: {intPrepPointsUsed} {strPoints}");
+
+            int limit = _objCharacter.SpellLimit;
+            int limitMod = _objImprovementManager.ValueOf(Improvement.ImprovementType.SpellLimit) +
+                        _objImprovementManager.ValueOf(Improvement.ImprovementType.FreeSpells);
+	        foreach (
+		        Improvement imp in
+		        _objCharacter.Improvements.Where(i => i.ImproveType == Improvement.ImprovementType.FreeSpellsATT))
+	        {
+		        CharacterAttrib att = _objCharacter.GetAttribute(imp.UniqueName);
+		        limitMod += att.TotalValue;
+	        }
+			foreach (
+				Improvement imp in
+				_objCharacter.Improvements.Where(i => i.ImproveType == Improvement.ImprovementType.FreeSpellsSkill))
+			{
+				Skill objSkill = _objCharacter.SkillsSection.Skills.First(x => x.Name == imp.ImprovedName);
+				limitMod += objSkill.LearnedRating;
+			}
+			if (limit > 0)
+	        {
+		        lblBuildPrepsBP.Text =
+			        string.Format(
+				        $"{prepPoints} {LanguageManager.Instance.GetString("String_Of")} {limit + limitMod}: {intPrepPointsUsed} {strPoints}");
+		        lblSpellsBP.Text =
+			        string.Format(
+				        $"{spellPoints} {LanguageManager.Instance.GetString("String_Of")} {limit + limitMod}: {intSpellPointsUsed} {strPoints}");
+		        lblBuildRitualsBP.Text =
+			        string.Format(
+				        $"{ritualPoints} {LanguageManager.Instance.GetString("String_Of")} {limit + limitMod}: {intRitualPointsUsed} {strPoints}");
+	        }
+	        else
+	        {
+	            if (limitMod == 0)
+	            {
+	                lblBuildPrepsBP.Text =
+	                    string.Format($"{intPrepPointsUsed} {strPoints}");
+	                lblSpellsBP.Text =
+	                    string.Format($"{intSpellPointsUsed} {strPoints}");
+	                lblBuildRitualsBP.Text =
+	                    string.Format($"{intRitualPointsUsed} {strPoints}");
+	            }
+	            else
+	            {
+                    //TODO: Make the costs render better, currently looks wrong as hell
+                    lblBuildPrepsBP.Text =
+                        string.Format(
+                            $"{prepPoints} {LanguageManager.Instance.GetString("String_Of")} {limitMod}: {intPrepPointsUsed} {strPoints}");
+                    lblSpellsBP.Text =
+                        string.Format(
+                            $"{spellPoints} {LanguageManager.Instance.GetString("String_Of")} {limitMod}: {intSpellPointsUsed} {strPoints}");
+                    lblBuildRitualsBP.Text =
+                        string.Format(
+                            $"{ritualPoints} {LanguageManager.Instance.GetString("String_Of")} {limitMod}: {intRitualPointsUsed} {strPoints}");
+                }
+	        }
+	        
 			intFreestyleBP += intSpellPointsUsed + intRitualPointsUsed + intPrepPointsUsed;
 
             // ------------------------------------------------------------------------------
@@ -13359,7 +13421,16 @@ namespace Chummer
             }
             if (intFormsPointsUsed > _objCharacter.CFPLimit)
                 intKarmaPointsRemain -= (intFormsPointsUsed - _objCharacter.CFPLimit) * _objOptions.KarmaNewComplexForm;
-            lblComplexFormsBP.Text = string.Format("{0} " + strPoints, intFormsPointsUsed.ToString());
+			string s = $"0 {LanguageManager.Instance.GetString("String_Karma")}";
+			if (_objCharacter.CFPLimit > 0)
+			{
+				s = $"{_objCharacter.SkillsSection.SkillGroupPoints} {LanguageManager.Instance.GetString("String_Of")} {_objCharacter.SkillsSection.SkillGroupPointsMaximum}";
+			}
+			if (intFormsPointsUsed > 0)
+			{
+				s += $": {_objCharacter.SkillsSection.SkillGroups.TotalCostKarma()} {LanguageManager.Instance.GetString("String_Karma")}";
+			}
+			lblComplexFormsBP.Text = s;
             intFreestyleBP += intFormsPointsUsed;
 
             // ------------------------------------------------------------------------------
@@ -13477,27 +13548,45 @@ namespace Chummer
 
 		private void UpdateSkillRelatedInfo()
 		{
+			string karma = LanguageManager.Instance.GetString("String_Karma");
+			string of = LanguageManager.Instance.GetString("String_Of");
+			string def = $"0 {karma}";
+			string s = string.Empty;
 			//Update Skill Labels
 			//Active skills
-			lblPBuildActiveSkills.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", _objCharacter.SkillsSection.SkillPoints, _objCharacter.SkillsSection.SkillPointsMaximum);
-		    if (_objCharacter.SkillsSection.Skills.TotalCostKarma() > 0)
-		    {
-		        lblPBuildActiveSkills.Text += string.Format(": {0} {1}", _objCharacter.SkillsSection.Skills.TotalCostKarma(), LanguageManager.Instance.GetString("String_Karma"));
-		    }
-
+			s = def;
+			if (_objCharacter.SkillsSection.SkillPointsMaximum > 0)
+			{
+				s = $"{_objCharacter.SkillsSection.SkillPoints} {of} {_objCharacter.SkillsSection.SkillPointsMaximum}";
+			}
+			if (_objCharacter.SkillsSection.Skills.TotalCostKarma() > 0)
+			{
+				s += $": {_objCharacter.SkillsSection.Skills.TotalCostKarma()} {karma}";
+			}
+			lblActiveSkillsBP.Text = s;
 			//Knowledge skills
-			lblPBuildKnowledgeSkills.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", _objCharacter.SkillsSection.KnowledgeSkillPointsRemain, _objCharacter.SkillsSection.KnowledgeSkillPoints);
-            if (_objCharacter.SkillsSection.KnowledgeSkills.TotalCostKarma() > 0)
-            {
-                lblPBuildKnowledgeSkills.Text += string.Format(": {0} {1}", _objCharacter.SkillsSection.KnowledgeSkills.TotalCostKarma(), LanguageManager.Instance.GetString("String_Karma"));
-            }
-            //Groups
-            lblPBuildSkillGroups.Text = string.Format("{0} " + LanguageManager.Instance.GetString("String_Of") + " {1}", _objCharacter.SkillsSection.SkillGroupPoints, _objCharacter.SkillsSection.SkillGroupPointsMaximum);
-            if (_objCharacter.SkillsSection.SkillGroups.TotalCostKarma() > 0)
-            {
-                lblPBuildSkillGroups.Text += string.Format(": {0} {1}", _objCharacter.SkillsSection.SkillGroups.TotalCostKarma(), LanguageManager.Instance.GetString("String_Karma"));
-            }
-        }
+			s = def;
+			if (_objCharacter.SkillsSection.KnowledgeSkillPoints > 0)
+			{
+				s = $"{_objCharacter.SkillsSection.KnowledgeSkillPointsRemain} {of} {_objCharacter.SkillsSection.KnowledgeSkillPoints}";
+			}
+			if (_objCharacter.SkillsSection.Skills.TotalCostKarma() > 0)
+			{
+				s += $": {_objCharacter.SkillsSection.KnowledgeSkills.TotalCostKarma()} {karma}";
+			}
+			lblKnowledgeSkillsBP.Text = s;
+			//Groups
+			s = def;
+			if (_objCharacter.SkillsSection.SkillGroupPointsMaximum > 0)
+			{
+				s = $"{_objCharacter.SkillsSection.SkillGroupPoints} {of} {_objCharacter.SkillsSection.SkillGroupPointsMaximum}";
+			}
+			if (_objCharacter.SkillsSection.SkillGroups.TotalCostKarma() > 0)
+			{
+				s += $": {_objCharacter.SkillsSection.SkillGroups.TotalCostKarma()} {karma}";
+			}
+			lblSkillGroupsBP.Text = s;
+		}
 
         /// <summary>
         /// Update the Character information.
@@ -13562,7 +13651,6 @@ namespace Chummer
                 decimal decESS = Math.Round(_objCharacter.Essence, _objCharacter.Options.EssenceDecimals, MidpointRounding.AwayFromZero);
                 lblESSMax.Text = decESS.ToString(GlobalOptions.CultureInfo);
                 tssEssence.Text = lblESSMax.Text;
-                lblPBuildEssence.Text = lblESSMax.Text;
 
                 lblCyberwareESS.Text = Math.Round(_objCharacter.CyberwareEssence, _objCharacter.Options.EssenceDecimals, MidpointRounding.AwayFromZero).ToString(GlobalOptions.CultureInfo);
                 lblBiowareESS.Text = Math.Round(_objCharacter.BiowareEssence, _objCharacter.Options.EssenceDecimals, MidpointRounding.AwayFromZero).ToString(GlobalOptions.CultureInfo);
@@ -13617,14 +13705,6 @@ namespace Chummer
                         }
                         objSpiritControl.RebuildSpiritList(_objCharacter.MagicTradition);
                     }
-				}
-
-				foreach (
-					Improvement imp in
-					_objCharacter.Improvements.Where(imp => imp.ImproveType == Improvement.ImprovementType.FreeSpellsATT))
-				{
-					CharacterAttrib att = _objCharacter.GetAttribute(imp.ImprovedName);
-					imp.Value = _objCharacter.MAG.TotalValue;
 				}
 
 				// If RES is enabled, update the Rating for Sprites (equal to Technomancer RES Rating).
@@ -13865,7 +13945,7 @@ namespace Chummer
             _objCharacter.Nuyen = intNuyen - intDeductions;
             lblRemainingNuyen.Text = $"{intNuyen - intDeductions:###,###,##0¥}";
             tssNuyenRemaining.Text = $"{intNuyen - intDeductions:###,###,##0¥}";
-            lblPBuildNuyen.Text = $"{intNuyen - intDeductions:###,###,##0¥}";
+			lblNuyenBP.Text = $"{intNuyen - intDeductions:###,###,##0¥}";
 
             return intNuyen - intDeductions;
         }
@@ -13885,6 +13965,7 @@ namespace Chummer
             lblCyberSleazeLabel.Visible = false;
             lblCyberDataProcessingLabel.Visible = false;
             lblCyberFirewallLabel.Visible = false;
+	        chkPrototypeTranshuman.Visible = false;
 
             if (treCyberware.SelectedNode == null || treCyberware.SelectedNode.Level == 0)
             {
@@ -13974,11 +14055,14 @@ namespace Chummer
 
                 _blnSkipRefresh = false;
 
+	            chkPrototypeTranshuman.Visible = _objCharacter.PrototypeTranshuman > 0;
+	            chkPrototypeTranshuman.Checked = objCyberware.PrototypeTranshuman;
+
                 lblCyberwareAvail.Text = objCyberware.TotalAvail;
                 lblCyberwareCost.Text = $"{objCyberware.TotalCost:###,###,##0¥}";
                 lblCyberwareCapacity.Text =
                     $"{objCyberware.CalculatedCapacity} ({objCyberware.CapacityRemaining.ToString()} {LanguageManager.Instance.GetString("String_Remaining")})";
-                lblCyberwareEssence.Text = objCyberware.CalculatedESS.ToString(GlobalOptions.CultureInfo);
+                lblCyberwareEssence.Text = objCyberware.CalculatedESS().ToString(GlobalOptions.CultureInfo);
                 ScheduleCharacterUpdate();
             }
             else
@@ -15265,6 +15349,7 @@ namespace Chummer
             Cyberware objCyberware = new Cyberware(_objCharacter);
 
 	        objCyberware.DiscountCost = frmPickCyberware.BlackMarketDiscount;
+			objCyberware.PrototypeTranshuman = frmPickCyberware.PrototypeTranshuman;
 
 			List<Weapon> objWeapons = new List<Weapon>();
             TreeNode objNode = new TreeNode();
@@ -15335,6 +15420,7 @@ namespace Chummer
             _blnSkipRefresh = false;
 
             _blnIsDirty = true;
+			_objCharacter.ForceAttributePropertyChangedNotificationAll(nameof(CharacterAttrib.AttributeModifiers));
 			_objCharacter.SkillsSection.ForceProperyChangedNotificationAll(nameof(Skill.PoolModifiers));
             PopulateGearList();
             UpdateWindowTitle();
@@ -17438,6 +17524,22 @@ namespace Chummer
 		        }
 		    }
 
+			// Cyberware: Prototype Transhuman
+			decimal d = _objCharacter.PrototypeTranshuman;
+			if (d > 0)
+			{
+				decimal total = 0;
+				foreach (Cyberware c in _objCharacter.Cyberware.Where(c => c.PrototypeTranshuman))
+				{
+					total += c.CalculatedESS(false);
+				}
+				if (d - total < 0)
+				{
+					blnValid = false;
+					strMessage += "\n\t" + LanguageManager.Instance.GetString("Message_OverPrototypeLimit").Replace("{0}", (total).ToString()).Replace("{1}", d.ToString());
+				}
+			}
+
 		    // Armor Availability.
 			foreach (Armor objArmor in _objCharacter.Armor)
 			{
@@ -19437,7 +19539,6 @@ namespace Chummer
             {
                 lblKarmaMetatypeBP.Text = "0 " + LanguageManager.Instance.GetString("String_Karma");
             }
-            lblMetatypeBP.Text = lblKarmaMetatypeBP.Text;
 
             string strToolTip = _objCharacter.Metatype;
             if (!string.IsNullOrEmpty(_objCharacter.Metavariant))

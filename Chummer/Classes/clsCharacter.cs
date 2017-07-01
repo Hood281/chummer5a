@@ -186,7 +186,6 @@ namespace Chummer
         private string _strGroupNotes = string.Empty;
         private int _intInitiateGrade = 0;
         private int _intSubmersionGrade = 0;
-	    private bool _blnOverrideSpecialAttributeESSLoss = false;
 
         // Pseudo-Attributes use for Mystic Adepts.
         private int _intMAGMagician = 0;
@@ -457,8 +456,6 @@ namespace Chummer
                 objWriter.WriteElementString("iscritter", _blnIsCritter.ToString());
             if (_blnPossessed)
                 objWriter.WriteElementString("possessed", _blnPossessed.ToString());
-            if (_blnOverrideSpecialAttributeESSLoss)
-                objWriter.WriteElementString("overridespecialattributeessloss", _blnOverrideSpecialAttributeESSLoss.ToString());
 			if (_intMetageneticLimit > 0)
 				objWriter.WriteElementString("metageneticlimit", _intMetageneticLimit.ToString());
 			// <karma />
@@ -996,7 +993,6 @@ namespace Chummer
                 return false;
             }
 
-#if RELEASE
             string strVersion = string.Empty;
 			//Check to see if the character was created in a version of Chummer later than the currently installed one.
             if (objXmlCharacter.TryGetStringFieldQuickly("appversion", ref strVersion) && !string.IsNullOrEmpty(strVersion))
@@ -1006,6 +1002,8 @@ namespace Chummer
                     strVersion = strVersion.Substring(2);
                 }
                 Version.TryParse(strVersion, out _verSavedVersion);
+            }
+#if RELEASE
                 Version verCurrentversion = Assembly.GetExecutingAssembly().GetName().Version;
                 int intResult = verCurrentversion.CompareTo(_verSavedVersion);
                 if (intResult == -1)
@@ -1018,10 +1016,9 @@ namespace Chummer
                         return false;
                     }
                 }
-            }
 #endif
-			// Get the name of the settings file in use if possible.
-			objXmlCharacter.TryGetStringFieldQuickly("settings", ref _strSettingsFileName);
+            // Get the name of the settings file in use if possible.
+            objXmlCharacter.TryGetStringFieldQuickly("settings", ref _strSettingsFileName);
 		    
             // Load the character's settings file.
             if (!_objOptions.Load(_strSettingsFileName))
@@ -1137,8 +1134,6 @@ namespace Chummer
 
 		    objXmlCharacter.TryGetInt32FieldQuickly("metageneticlimit", ref _intMetageneticLimit);
 		    objXmlCharacter.TryGetBoolFieldQuickly("possessed", ref _blnPossessed);
-
-		    objXmlCharacter.TryGetBoolFieldQuickly("overridespecialattributeessloss", ref _blnOverrideSpecialAttributeESSLoss);
 
 		    objXmlCharacter.TryGetInt32FieldQuickly("contactpoints", ref _intContactPoints);
 		    objXmlCharacter.TryGetInt32FieldQuickly("contactpointsused", ref _intContactPointsUsed);
@@ -4006,22 +4001,6 @@ namespace Chummer
         }
 
         /// <summary>
-        /// Whether or not we should override the option of how Special CharacterAttribute Essence Loss is handled. When enabled, ESS loss always affects the character's maximum MAG/RES instead.
-        /// This should only be enabled as a result of swapping out a Latent Quality for its fully-realised version.
-        /// </summary>
-        public bool OverrideSpecialAttributeEssenceLoss
-        {
-            get
-            {
-                return _blnOverrideSpecialAttributeESSLoss;
-            }
-            set
-            {
-                _blnOverrideSpecialAttributeESSLoss = value;
-            }
-        }
-
-        /// <summary>
         /// Maximum item Availability for new characters.
         /// </summary>
         public int MaximumAvailability
@@ -4568,23 +4547,15 @@ namespace Chummer
                 foreach (Cyberware objCyberware in _lstCyberware)
                 {
                     if (objCyberware.Name == "Essence Hole")
-                        decHole += objCyberware.CalculatedESS;
+                        decHole += objCyberware.CalculatedESS();
                     else
                     {
 						if (objCyberware.SourceType == Improvement.ImprovementSource.Cyberware)
-							decCyberware += objCyberware.CalculatedESS;
+							decCyberware += objCyberware.CalculatedESS();
 						else if (objCyberware.SourceType == Improvement.ImprovementSource.Bioware)
-								decBioware += objCyberware.CalculatedESS;
+								decBioware += objCyberware.CalculatedESS();
 						}
                     }
-				if (_decPrototypeTranshuman > 0)
-				{
-                    decBioware -= _decPrototypeTranshuman;
-                    if (decBioware < 0)
-					{
-						decBioware = 0;
-					}
-				}
 	            decESS += Convert.ToDecimal(_objImprovementManager.ValueOf(Improvement.ImprovementType.EssencePenalty));
 
 				decESS -= decCyberware + decBioware;
@@ -4603,7 +4574,7 @@ namespace Chummer
             get
             {
                 // Run through all of the pieces of Cyberware and include their Essence cost. Cyberware and Bioware costs are calculated separately. 
-                return _lstCyberware.Where(objCyberware => objCyberware.Name != "Essence Hole" && objCyberware.SourceType == Improvement.ImprovementSource.Cyberware).Sum(objCyberware => objCyberware.CalculatedESS);
+                return _lstCyberware.Where(objCyberware => objCyberware.Name != "Essence Hole" && objCyberware.SourceType == Improvement.ImprovementSource.Cyberware).Sum(objCyberware => objCyberware.CalculatedESS());
             }
         }
 
@@ -4615,7 +4586,7 @@ namespace Chummer
             get
             {
                 // Run through all of the pieces of Cyberware and include their Essence cost. Cyberware and Bioware costs are calculated separately. 
-                return _lstCyberware.Where(objCyberware => objCyberware.Name != "Essence Hole" && objCyberware.SourceType == Improvement.ImprovementSource.Bioware).Sum(objCyberware => objCyberware.CalculatedESS);
+                return _lstCyberware.Where(objCyberware => objCyberware.Name != "Essence Hole" && objCyberware.SourceType == Improvement.ImprovementSource.Bioware).Sum(objCyberware => objCyberware.CalculatedESS());
             }
         }
 
@@ -4627,7 +4598,7 @@ namespace Chummer
             get
             {
                 // Find the total Essence Cost of all Essence Hole objects. 
-                return _lstCyberware.Where(objCyberware => objCyberware.Name == "Essence Hole").Sum(objCyberware => objCyberware.CalculatedESS);
+                return _lstCyberware.Where(objCyberware => objCyberware.Name == "Essence Hole").Sum(objCyberware => objCyberware.CalculatedESS());
             }
         }
 
@@ -7310,8 +7281,8 @@ namespace Chummer
 		//List of events that might be able to affect attributes. TODO: Should this just be merged into skillRelated?
 		private static readonly Improvement.ImprovementType[] attribRelated = {
 			Improvement.ImprovementType.Attributelevel,
-			Improvement.ImprovementType.Attribute
-			,
+			Improvement.ImprovementType.Attribute,
+			Improvement.ImprovementType.Seeker
 		};
 		//To get when things change in improvementmanager
 		//Ugly, ugly done, but we cannot get events out of it today
@@ -7326,6 +7297,14 @@ namespace Chummer
 			if (_lstTransaction.Any(x => attribRelated.Any(y => y == x.ImproveType)))
 			{
 				AttributeImprovementEvent?.Invoke(_lstTransaction, improvementManager);
+			}
+		}
+
+		internal void ForceAttributePropertyChangedNotificationAll(string name)
+		{
+			foreach (CharacterAttrib att in _attributes)
+			{
+				att.ForceEvent(name);
 			}
 		}
 	}
